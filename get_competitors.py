@@ -20,7 +20,10 @@ import logging
 import re
 import time
 from typing import Any, Dict, List
+import os
+import subprocess
 
+from selenium.webdriver.chrome.service import Service
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
@@ -60,15 +63,34 @@ def _setup_browser():
     }
     options.add_experimental_option("prefs", prefs)
 
+    # try:
+    #     driver = webdriver.Chrome(options=options)
+    #     driver.set_page_load_timeout(30)
+    #     driver.implicitly_wait(2)
+    #     return driver
+    # except Exception as e:
+    #     logging.error(f"Chrome setup failed: {e}")
+    #     raise
+    chromium_path = "/usr/bin/chromium"
+    driver_path = "/usr/bin/chromedriver"
+    if os.path.exists(chromium_path):
+        options.binary_location = chromium_path
+
     try:
-        driver = webdriver.Chrome(options=options)
+        logging.info(subprocess.run(["chromium", "--version"], capture_output=True, text=True).stdout)
+        logging.info(subprocess.run(["chromedriver", "--version"], capture_output=True, text=True).stdout)
+
+        if os.path.exists(driver_path):
+            service = Service(executable_path=driver_path)
+            driver = webdriver.Chrome(service=service, options=options)
+        else:
+            driver = webdriver.Chrome(options=options)
         driver.set_page_load_timeout(30)
         driver.implicitly_wait(2)
         return driver
     except Exception as e:
         logging.error(f"Chrome setup failed: {e}")
         raise
-
 
 def find_competitors(industry: str, region: str, max_competitors: int = 5) -> List[Dict[str, Any]]:
     """
