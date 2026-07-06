@@ -1,6 +1,0 @@
-streamlit
-pandas
-httpx
-selenium
-beautifulsoup4
-webdriver-manager

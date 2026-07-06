@@ -1,0 +1,82 @@
+[
+  {
+    "domain": ".facebook.com",
+    "name": "sb",
+    "value": "To05akfnSMQIUE5GOuKiXHGL",
+    "path": "/",
+    "secure": true,
+    "expires": "2027-08-07T09:25:26.042Z"
+  },
+  {
+    "domain": ".facebook.com",
+    "name": "ps_l",
+    "value": "1",
+    "path": "/",
+    "secure": true,
+    "expires": "2027-07-28T08:30:14.265Z"
+  },
+  {
+    "domain": ".facebook.com",
+    "name": "ps_n",
+    "value": "1",
+    "path": "/",
+    "secure": true,
+    "expires": "2027-07-28T08:30:14.265Z"
+  },
+  {
+    "domain": ".facebook.com",
+    "name": "datr",
+    "value": "To05alVBzuu0kL99C7CAUTYS",
+    "path": "/",
+    "secure": true,
+    "expires": "2027-07-27T19:30:23.117Z"
+  },
+  {
+    "domain": ".facebook.com",
+    "name": "c_user",
+    "value": "61591545333367",
+    "path": "/",
+    "secure": true,
+    "expires": "2027-07-06T09:25:37.524Z"
+  },
+  {
+    "domain": ".facebook.com",
+    "name": "xs",
+    "value": "41%3AeKuZBxcEv1W5XA%3A2%3A1783070724%3A-1%3A-1%3A%3AAczhA3w1bI3uPudprP-hroHlmOXtMM0DVPq1vmUvjnM",
+    "path": "/",
+    "secure": true,
+    "expires": "2027-07-06T09:25:37.524Z"
+  },
+  {
+    "domain": ".facebook.com",
+    "name": "fr",
+    "value": "18jWoEXWA665VYsLk.AWci8PVQUFmHRypeKlwP6EE5SL-sTJDS-sK-WZtYZHd0z047B1s.BqS3SQ..AAA.0.0.BqS3SQ.AWc9grugDhzccFNq5OOgoBAIXps",
+    "path": "/",
+    "secure": true,
+    "expires": "2026-10-04T09:25:37.524Z"
+  },
+  {
+    "domain": ".facebook.com",
+    "name": "wd",
+    "value": "150x695",
+    "path": "/",
+    "secure": true,
+    "expires": "2026-07-13T09:25:56.000Z"
+  },
+  {
+    "domain": ".facebook.com",
+    "name": "dpr",
+    "value": "1.25",
+    "path": "/",
+    "secure": true,
+    "expires": "2026-07-13T09:08:07.000Z"
+  },
+  {
+    "domain": ".facebook.com",
+    "name": "locale",
+    "value": "en_GB",
+    "path": "/",
+    "secure": true,
+    "expires": "2026-07-10T09:12:46.825Z"
+  }
+]

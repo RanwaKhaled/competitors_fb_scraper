@@ -11,13 +11,13 @@ This is the "just find the profile URL" version — it stops right after
 resolving each competitor's Facebook Page URL. No post scraping.
 
 Requirements:
-    pip install selenium beautifulsoup4 toml
+    pip install selenium beautifulsoup4
 
 Notes:
     - Facebook often requires being logged in to reliably see Page search
-      results. If credentials are present in .streamlit/secrets.toml
-      (FB_EMAIL / FB_PASSWORD), the script will attempt to log in.
-      Otherwise it proceeds logged-out, which may limit result quality.
+      results. Login is done via cookies exported from an already-logged-in
+      browser session (see fb_cookies.json). Otherwise it proceeds
+      logged-out, which may limit result quality.
     - Facebook's DOM is obfuscated and changes often; if the search stops
       finding pages, that selector logic is the first place to check.
 """
@@ -26,7 +26,6 @@ import csv
 import json
 import logging
 import os
-import random
 import re
 import sys
 import time
@@ -35,7 +34,6 @@ from typing import Any, Dict, List, Optional
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
@@ -43,8 +41,9 @@ from selenium.common.exceptions import NoSuchElementException, TimeoutException
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 COMPETITORS_FILE = "competitors.json"
-INDUSTRY = "coffee shop alexandria"
+INDUSTRY = ""
 OUTPUT_CSV = "competitor_page_urls.csv"
+FB_COOKIES_FILE = "fb_cookies.json"
 
 
 # ---------------------------------------------------------------------- #
@@ -80,46 +79,55 @@ def setup_browser(headless: bool = False):
     return driver
 
 
-def _load_fb_credentials(path: str = ".streamlit/secrets.toml") -> Optional[Dict[str, str]]:
+def _load_fb_cookies(path: str = FB_COOKIES_FILE) -> Optional[List[Dict[str, Any]]]:
     if not os.path.exists(path):
         return None
     try:
-        import toml
-        secrets = toml.load(path)
-        email = secrets.get("FB_EMAIL") or secrets.get("fb_email")
-        password = secrets.get("FB_PASSWORD") or secrets.get("fb_password")
-        if email and password:
-            return {"email": email, "password": password}
+        with open(path, "r", encoding="utf-8") as f:
+            cookies = json.load(f)
+        if isinstance(cookies, list) and cookies:
+            return cookies
+        logging.warning(f"{path} did not contain a non-empty list of cookies.")
+        return None
     except Exception as e:
         logging.warning(f"Could not read {path}: {e}")
-    return None
-
-
-def _human_type(element, text: str):
-    for char in text:
-        element.send_keys(char)
-        time.sleep(random.uniform(0.05, 0.2))
+        return None
 
 
 def try_login(driver) -> bool:
-    creds = _load_fb_credentials()
-    if not creds:
-        logging.info("No FB credentials found — continuing logged-out.")
+    """Log in via cookies exported from an already-authenticated browser
+    session, instead of typing credentials. Falls back to logged-out
+    browsing if no cookie file is present or the cookies don't work."""
+    cookies = _load_fb_cookies()
+    if not cookies:
+        logging.info("No FB cookies found — continuing logged-out.")
         return False
+
     try:
-        driver.get("https://www.facebook.com/login")
-        email_input = WebDriverWait(driver, 15).until(
-            EC.presence_of_element_located((By.NAME, "email"))
-        )
-        _human_type(email_input, creds["email"])
-        password_input = driver.find_element(By.NAME, "pass")
-        _human_type(password_input, creds["password"])
-        password_input.send_keys(Keys.RETURN)
-        time.sleep(15)
-        logging.info("Submitted Facebook login.")
-        return True
+        # Cookies are domain-bound, so we need to be on facebook.com first.
+        driver.get("https://www.facebook.com")
+
+        for cookie in cookies:
+            cookie = dict(cookie)  # avoid mutating the loaded list
+            cookie.pop("sameSite", None)
+            cookie.pop("storeId", None)
+            try:
+                driver.add_cookie(cookie)
+            except Exception as e:
+                logging.debug(f"Skipped cookie {cookie.get('name')}: {e}")
+
+        # Reload so the session picks up the newly-added cookies.
+        driver.get("https://www.facebook.com")
+        time.sleep(3)
+
+        if "login" not in driver.current_url:
+            logging.info("Logged in successfully via cookies.")
+            return True
+
+        logging.warning("Cookies expired or invalid — continuing logged-out.")
+        return False
     except Exception as e:
-        logging.warning(f"Facebook login failed: {e}")
+        logging.warning(f"Facebook cookie login failed: {e}")
         return False
 
 

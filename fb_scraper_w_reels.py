@@ -1,7 +1,8 @@
 import sys
+import json
+import os
 import re
 import time
-import random
 import platform
 import shutil
 from selenium import webdriver
@@ -9,7 +10,6 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.chrome.service import Service
 from selenium.common.exceptions import NoSuchElementException, ElementClickInterceptedException
 from webdriver_manager.chrome import ChromeDriverManager
@@ -18,10 +18,10 @@ from bs4 import BeautifulSoup
 import pandas as pd
 
 POST_URL   = sys.argv[1] if len(sys.argv) > 1 else ""
-EMAIL      = sys.argv[2] if len(sys.argv) > 2 else ""
-PASSWORD   = sys.argv[3] if len(sys.argv) > 3 else ""
-MAX        = int(sys.argv[4]) if len(sys.argv) > 4 else 10
-OUTPUT_CSV = sys.argv[5] if len(sys.argv) > 5 else "fb_comments.csv"
+MAX        = int(sys.argv[2]) if len(sys.argv) > 2 else 10
+OUTPUT_CSV = sys.argv[3] if len(sys.argv) > 3 else "fb_comments.csv"
+
+FB_COOKIES_FILE = "fb_cookies.json"
 
 _TIME_RE = re.compile(
     r'\s*(\d+\s+(?:second|minute|hour|day|week|month|year)s?\s+ago'
@@ -37,11 +37,10 @@ _COUNT_RE = re.compile(r'^([\d,.]+)\s*([KkMm]?)\s*comments?$', re.IGNORECASE)
 
 
 class FacebookScraper:
-    def __init__(self, email, password):
-        self.email    = email
-        self.password = password
-        self.driver   = None
-        self.is_reel  = False
+    def __init__(self, cookies_file=FB_COOKIES_FILE):
+        self.cookies_file = cookies_file
+        self.driver        = None
+        self.is_reel       = False
 
     def initialize_driver(self):
         options = webdriver.ChromeOptions()
@@ -71,21 +70,54 @@ class FacebookScraper:
             "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
         )
 
-    def simulate_human_typing(self, element, text):
-        for char in text:
-            element.send_keys(char)
-            time.sleep(random.uniform(0.05, 0.2))
+    def _load_fb_cookies(self):
+        if not os.path.exists(self.cookies_file):
+            return None
+        try:
+            with open(self.cookies_file, "r", encoding="utf-8") as f:
+                cookies = json.load(f)
+            if isinstance(cookies, list) and cookies:
+                return cookies
+            print(f"{self.cookies_file} did not contain a non-empty list of cookies.")
+            return None
+        except Exception as e:
+            print(f"Could not read {self.cookies_file}: {e}")
+            return None
 
     def login(self):
-        self.driver.get("https://www.facebook.com/login")
-        email_input = WebDriverWait(self.driver, 15).until(
-            EC.presence_of_element_located((By.NAME, "email"))
-        )
-        self.simulate_human_typing(email_input, self.email)
-        password_input = self.driver.find_element(By.NAME, "pass")
-        self.simulate_human_typing(password_input, self.password)
-        password_input.send_keys(Keys.RETURN)
-        time.sleep(15)  # Increased wait for login
+        """Log in via cookies exported from an already-authenticated browser
+        session, instead of typing credentials."""
+        cookies = self._load_fb_cookies()
+        if not cookies:
+            print("No FB cookies found — continuing logged-out.")
+            return False
+
+        try:
+            # Cookies are domain-bound, so we need to be on facebook.com first.
+            self.driver.get("https://www.facebook.com")
+
+            for cookie in cookies:
+                cookie = dict(cookie)  # avoid mutating the loaded list
+                cookie.pop("sameSite", None)
+                cookie.pop("storeId", None)
+                try:
+                    self.driver.add_cookie(cookie)
+                except Exception as e:
+                    print(f"Skipped cookie {cookie.get('name')}: {e}")
+
+            # Reload so the session picks up the newly-added cookies.
+            self.driver.get("https://www.facebook.com")
+            time.sleep(3)
+
+            if "login" not in self.driver.current_url:
+                print("Logged in successfully via cookies.")
+                return True
+
+            print("Cookies expired or invalid — continuing logged-out.")
+            return False
+        except Exception as e:
+            print(f"Facebook cookie login failed: {e}")
+            return False
 
     def navigate_to_post(self, post_url):
         self.is_reel = "/reel/" in post_url.lower()
@@ -467,11 +499,11 @@ class FacebookScraper:
 
 
 if __name__ == "__main__":
-    if not all([POST_URL, EMAIL, PASSWORD]):
+    if not POST_URL:
         print("Missing required arguments", file=sys.stderr)
         sys.exit(1)
 
-    scraper = FacebookScraper(EMAIL, PASSWORD)
+    scraper = FacebookScraper()
     try:
         scraper.initialize_driver()
         scraper.login()

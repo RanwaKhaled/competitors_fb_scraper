@@ -2,6 +2,8 @@
 Competitor Finder - Streamlit UI
 
 A wizard:
+  0) Paste Facebook cookies (saved to fb_cookies.json, used for cookie-based
+     login by every scraper instead of a typed password)
   1) Enter industry, location, and how many competitors to find
   2) Pick one of the competitors returned by find_competitors()
   3) Resolve that competitor's Facebook Page via scrape_competitor_profile.py
@@ -17,16 +19,50 @@ Run with:
 
 import os
 import re
+import json
+import time
+from datetime import datetime
 
 import pandas as pd
 import streamlit as st
 
 from get_competitors import find_competitors
-from scrape_competitor_profile import setup_browser, try_login, find_facebook_page_url, _load_fb_credentials
+from scrape_competitor_profile import setup_browser, try_login, find_facebook_page_url
 from post_scraper_test import FacebookScraper
 from fb_scraper_w_reels import FacebookScraper as CommentScraper
 
 st.set_page_config(page_title="Competitor Finder", page_icon="🔎", layout="centered")
+
+FB_COOKIES_FILE = "fb_cookies.json"
+
+
+def format_and_resave_cookie_file(path: str = FB_COOKIES_FILE) -> list:
+    """
+    Selenium's driver.add_cookie() wants an integer Unix timestamp under
+    'expiry', not the ISO-8601 string DevTools exports under 'expires'.
+    Read the cookie file, convert every cookie's 'expires' -> 'expiry' in
+    place, and resave it so it's ready for Selenium to consume as-is.
+    """
+    with open(path, "r", encoding="utf-8") as f:
+        cookies = json.load(f)
+
+    for cookie in cookies:
+        if "expires" in cookie:
+            date_str = cookie.pop("expires")
+            try:
+                # Clean the 'Z' suffix to make it ISO compliant (+00:00),
+                # then parse the full timestamp string directly.
+                clean_date = date_str.replace("Z", "+00:00")
+                dt = datetime.fromisoformat(clean_date)
+                cookie["expiry"] = int(dt.timestamp())
+            except ValueError:
+                print(f"Warning: Could not parse date '{date_str}' for cookie {cookie.get('name')}. Using fallback.")
+                cookie["expiry"] = int(time.time()) + (365 * 24 * 60 * 60)
+
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(cookies, f, indent=2)
+
+    return cookies
 
 # ---------------------------------------------------------------------------
 # Post cache (CSV on disk, keyed by the Facebook page's handle)
@@ -190,7 +226,7 @@ st.markdown(
 # State
 # ---------------------------------------------------------------------------
 defaults = {
-    "step": 1,
+    "step": 0,
     "industry": "",
     "location": "",
     "competitors": [],
@@ -222,10 +258,90 @@ def go_to_step(step: int) -> None:
 
 st.title("Competitor Finder")
 
+# The cookies fb_cookies.json needs — domain/path/secure are the same for
+# all of them so those get filled in automatically; only name is fixed per
+# row, value and expires come from the user.
+FB_COOKIE_NAMES = ["sb", "ps_l", "ps_n", "datr", "c_user", "xs", "fr", "wd", "dpr", "locale"]
+
+# ---------------------------------------------------------------------------
+# Step 0 - Fill in Facebook cookie values (saved to fb_cookies.json, used for
+#          cookie-based login by every scraper instead of a typed password)
+# ---------------------------------------------------------------------------
+if st.session_state.step == 0:
+    st.markdown('<div class="step-pill"><span class="num">0</span> Facebook Login Cookies</div>', unsafe_allow_html=True)
+    st.subheader("Enter your Facebook cookies")
+    st.caption("This lets the scraper log in as you, instead of typing a password.")
+
+    with st.expander("How do I get these?"):
+        st.markdown(
+            "1. Log in to Facebook.\n"
+            "2. Go to your **Home** page (not your profile).\n"
+            "3. Open DevTools (**F12**).\n"
+            "4. Go to the **Application** tab.\n"
+            "5. Choose **Cookies** in the sidebar."
+        )
+
+    has_saved = os.path.exists(FB_COOKIES_FILE)
+    if has_saved:
+        st.success("Cookies are already saved. You can continue, or fill in new values below to replace them.")
+        if st.button("Continue with saved cookies", use_container_width=True):
+            format_and_resave_cookie_file(FB_COOKIES_FILE) # temporary
+            go_to_step(1)
+            st.rerun()
+
+    st.caption("For each cookie, copy its **Value** and **Expires / Max-Age** from DevTools.")
+
+    with st.form("cookie_form"):
+        field_values = {}
+        for cname in FB_COOKIE_NAMES:
+            st.markdown(f"**{cname}**")
+            col_v, col_e = st.columns([2, 1])
+            with col_v:
+                value = st.text_input(
+                    f"{cname} value", key=f"cookie_value_{cname}",
+                    label_visibility="collapsed", placeholder="Value",
+                )
+            with col_e:
+                expires = st.text_input(
+                    f"{cname} expires", key=f"cookie_expires_{cname}",
+                    label_visibility="collapsed", placeholder="Expires",
+                )
+            field_values[cname] = (value, expires)
+
+        submitted = st.form_submit_button("Save cookies & continue", use_container_width=True, type="primary")
+
+    if submitted:
+        cleaned = []
+        for cname, (value, expires) in field_values.items():
+            value = value.strip()
+            expires = expires.strip()
+            if not value:
+                continue  # skip cookies the user left blank
+            cookie = {
+                "domain": ".facebook.com",
+                "name": cname,
+                "value": value,
+                "path": "/",
+                "secure": True,
+            }
+            if expires:
+                cookie["expires"] = expires
+            cleaned.append(cookie)
+
+        if not cleaned:
+            st.error("Fill in at least one cookie's value.")
+        else:
+            with open(FB_COOKIES_FILE, "w", encoding="utf-8") as f:
+                json.dump(cleaned, f, indent=2)
+            format_and_resave_cookie_file(FB_COOKIES_FILE)
+            st.success(f"Saved {len(cleaned)} cookies.")
+            go_to_step(1)
+            st.rerun()
+
 # ---------------------------------------------------------------------------
 # Step 1 - Enter industry, location & number of competitors
 # ---------------------------------------------------------------------------
-if st.session_state.step == 1:
+elif st.session_state.step == 1:
     st.markdown('<div class="step-pill"><span class="num">1</span> Enter Industry, Location &amp; Competitors</div>', unsafe_allow_html=True)
 
     with st.form("search_form"):
@@ -422,31 +538,23 @@ elif st.session_state.step == 4:
             st.session_state.posts_done = True
             st.session_state.posts_from_cache = True
         else:
-            creds = _load_fb_credentials()
-            if not creds:
-                st.error(
-                    "No Facebook credentials found. Add `FB_EMAIL` and `FB_PASSWORD` to "
-                    "`.streamlit/secrets.toml` so `post_scraper_test.py` can log in and scrape posts."
-                )
-                st.session_state.posts_done = True  # stop re-running this check every rerun
-            else:
-                with st.spinner(f"Fetching {num_posts} posts from {name}..."):
-                    scraper = FacebookScraper(creds["email"], creds["password"])
-                    try:
-                        scraper.initialize_driver()
-                        scraper.login()
-                        # The root Page URL can show a "Featured"/algorithmic mix of
-                        # posts (older high-engagement posts can rank above recent
-                        # ones). The /posts sub-page forces strict newest-first
-                        # ordering instead.
-                        posts_url = page_url.rstrip("/") + "/posts"
-                        scraper.navigate_to_profile(posts_url)
-                        posts = scraper.scrape_posts(max_posts=num_posts)
-                    except Exception as e:
-                        posts = None
-                        st.error(f"Something went wrong while fetching posts: {e}")
-                    finally:
-                        scraper.close()
+            with st.spinner(f"Fetching {num_posts} posts from {name}..."):
+                scraper = FacebookScraper()
+                try:
+                    scraper.initialize_driver()
+                    scraper.login()
+                    # The root Page URL can show a "Featured"/algorithmic mix of
+                    # posts (older high-engagement posts can rank above recent
+                    # ones). The /posts sub-page forces strict newest-first
+                    # ordering instead.
+                    posts_url = page_url.rstrip("/") + "/posts"
+                    scraper.navigate_to_profile(posts_url)
+                    posts = scraper.scrape_posts(max_posts=num_posts)
+                except Exception as e:
+                    posts = None
+                    st.error(f"Something went wrong while fetching posts: {e}")
+                finally:
+                    scraper.close()
 
                 if posts:
                     save_posts_to_cache(page_url, posts)
@@ -612,40 +720,32 @@ elif st.session_state.step == 6:
                 st.session_state.comments_done = True
                 st.session_state.comments_from_cache = True
             else:
-                creds = _load_fb_credentials()
-                if not creds:
-                    st.error(
-                        "No Facebook credentials found. Add `FB_EMAIL` and `FB_PASSWORD` to "
-                        "`.streamlit/secrets.toml` so comments can be scraped."
-                    )
-                    st.session_state.comments_done = True
-                else:
-                    with st.spinner(f"Fetching up to {num_comments} comments..."):
-                        scraper = CommentScraper(creds["email"], creds["password"])
-                        try:
-                            scraper.initialize_driver()
-                            scraper.login()
-                            scraper.navigate_to_post(post_link)
+                with st.spinner(f"Fetching up to {num_comments} comments..."):
+                    scraper = CommentScraper()
+                    try:
+                        scraper.initialize_driver()
+                        scraper.login()
+                        scraper.navigate_to_post(post_link)
 
-                            max_c = num_comments
-                            actual = scraper.get_actual_comment_count()
-                            if actual is not None and actual < max_c:
-                                max_c = actual
+                        max_c = num_comments
+                        actual = scraper.get_actual_comment_count()
+                        if actual is not None and actual < max_c:
+                            max_c = actual
 
-                            scraper.load_comments(max_comments=max_c)
-                            comments = scraper.extract_comments(max_comments=max_c)
-                        except Exception as e:
-                            comments = None
-                            st.error(f"Something went wrong while fetching comments: {e}")
-                        finally:
-                            scraper.close()
+                        scraper.load_comments(max_comments=max_c)
+                        comments = scraper.extract_comments(max_comments=max_c)
+                    except Exception as e:
+                        comments = None
+                        st.error(f"Something went wrong while fetching comments: {e}")
+                    finally:
+                        scraper.close()
 
-                    if comments:
-                        save_comments_to_cache(post_link, comments)
+                if comments:
+                    save_comments_to_cache(post_link, comments)
 
-                    st.session_state.comments = comments
-                    st.session_state.comments_done = True
-                    st.session_state.comments_from_cache = False
+                st.session_state.comments = comments
+                st.session_state.comments_done = True
+                st.session_state.comments_from_cache = False
 
     comments = st.session_state.comments
 

@@ -1,23 +1,16 @@
 [
     {
-        "name": "Profit gym elite",
+        "name": "Terres de Café",
         "rating": 0.0,
         "review_count": 0,
         "address": "",
-        "google_maps_url": "https://www.google.com/maps/place/Profit+gym+elite/data=!4m7!3m6!1s0x14f5c5b64b5c185b:0x29b663b89ec79c23!8m2!3d31.208465!4d29.9274118!16s%2Fg%2F11ypwhptn8!19sChIJWxhcS7bF9RQRI5zHnrhjtik?authuser=0&hl=en&rclk=1"
+        "google_maps_url": "https://www.google.com/maps/place/Terres+de+Caf%C3%A9/data=!4m7!3m6!1s0x47e66f89518148f9:0x5ee15f10ed9fb55a!8m2!3d48.8620039!4d2.3403462!16s%2Fg%2F11lwqbh93m!19sChIJ-UiBUYlv5kcRWrWf7RBf4V4?authuser=0&hl=en&rclk=1"
     },
     {
-        "name": "Academy gym",
+        "name": "Clove",
         "rating": 0.0,
         "review_count": 0,
         "address": "",
-        "google_maps_url": "https://www.google.com/maps/place/Academy+gym/data=!4m7!3m6!1s0x14f5c3c15a737b3d:0x53d6aa3e8c04fbf5!8m2!3d31.1996875!4d29.9281875!16s%2Fg%2F11vbr2gfdc!19sChIJPXtzWsHD9RQR9fsEjD6q1lM?authuser=0&hl=en&rclk=1"
-    },
-    {
-        "name": "Hype Gym & Fitness",
-        "rating": 0.0,
-        "review_count": 0,
-        "address": "",
-        "google_maps_url": "https://www.google.com/maps/place/Hype+Gym+%26+Fitness/data=!4m7!3m6!1s0x14f5c3abb4ae6d4b:0x7567424981421690!8m2!3d31.2004296!4d29.9181538!16s%2Fg%2F11gxdtrhnm!19sChIJS22utKvD9RQRkBZCgUlCZ3U?authuser=0&hl=en&rclk=1"
+        "google_maps_url": "https://www.google.com/maps/place/Clove/data=!4m7!3m6!1s0x47e66fa276d31d19:0xd5db888ba224d80a!8m2!3d48.8846433!4d2.3418273!16s%2Fg%2F11s5fsnrmr!19sChIJGR3TdqJv5kcRCtgkoouI29U?authuser=0&hl=en&rclk=1"
     }
 ]

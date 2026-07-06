@@ -1,12 +1,12 @@
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from bs4 import BeautifulSoup
+import json
+import os
 import re
 import time
-import random
 import pandas as pd
 
 # Patterns that indicate the href is a real post permalink rather than a
@@ -23,11 +23,12 @@ _REAL_POST_PATTERNS = [
 
 TIME_ANCHOR_SELECTOR = "div.xu06os2.x1ok221b > span > div > span > span > a"
 
+FB_COOKIES_FILE = "fb_cookies.json"
+
 
 class FacebookScraper:
-    def __init__(self, email, password):
-        self.email = email
-        self.password = password
+    def __init__(self, cookies_file=FB_COOKIES_FILE):
+        self.cookies_file = cookies_file
         self.driver = None
         # Cache resolved permalinks by the post's raw (unresolved) href so a
         # post that's still on screen across multiple scroll iterations isn't
@@ -51,34 +52,54 @@ class FacebookScraper:
         self.driver = webdriver.Chrome(options=options)
         self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
 
-    def simulate_human_typing(self, element, text):
-        """Simulate human-like typing patterns"""
-        for char in text:
-            element.send_keys(char)
-            time.sleep(random.uniform(0.1, 0.3))
-            if random.random() < 0.1:
-                time.sleep(random.uniform(0.3, 0.7))
+    def _load_fb_cookies(self):
+        if not os.path.exists(self.cookies_file):
+            return None
+        try:
+            with open(self.cookies_file, "r", encoding="utf-8") as f:
+                cookies = json.load(f)
+            if isinstance(cookies, list) and cookies:
+                return cookies
+            print(f"{self.cookies_file} did not contain a non-empty list of cookies.")
+            return None
+        except Exception as e:
+            print(f"Could not read {self.cookies_file}: {e}")
+            return None
 
     def login(self):
-        """Login to Facebook"""
-        self.driver.get("https://www.facebook.com/login")
+        """Log in via cookies exported from an already-authenticated browser
+        session, instead of typing credentials."""
+        cookies = self._load_fb_cookies()
+        if not cookies:
+            print("No FB cookies found — continuing logged-out.")
+            return False
 
-        # Enter email
-        email_input = WebDriverWait(self.driver, 10).until(
-            EC.presence_of_element_located((By.NAME, "email"))
-        )
-        self.simulate_human_typing(email_input, self.email)
+        try:
+            # Cookies are domain-bound, so we need to be on facebook.com first.
+            self.driver.get("https://www.facebook.com")
 
-        # Enter password
-        password_input = WebDriverWait(self.driver, 10).until(
-            EC.presence_of_element_located((By.NAME, "pass"))
-        )
-        self.simulate_human_typing(password_input, self.password)
+            for cookie in cookies:
+                cookie = dict(cookie)  # avoid mutating the loaded list
+                cookie.pop("sameSite", None)
+                cookie.pop("storeId", None)
+                try:
+                    self.driver.add_cookie(cookie)
+                except Exception as e:
+                    print(f"Skipped cookie {cookie.get('name')}: {e}")
 
-        # Submit by pressing Enter instead of locating/clicking the login button
-        password_input.send_keys(Keys.RETURN)
+            # Reload so the session picks up the newly-added cookies.
+            self.driver.get("https://www.facebook.com")
+            time.sleep(3)
 
-        time.sleep(15)
+            if "login" not in self.driver.current_url:
+                print("Logged in successfully via cookies.")
+                return True
+
+            print("Cookies expired or invalid — continuing logged-out.")
+            return False
+        except Exception as e:
+            print(f"Facebook cookie login failed: {e}")
+            return False
 
     def navigate_to_profile(self, profile_url):
         """Navigate to a specific Facebook profile"""
@@ -295,8 +316,8 @@ class FacebookScraper:
 
 # Example usage
 if __name__ == "__main__":
-    # Initialize the scraper
-    scraper = FacebookScraper("hathawayrose50@gmail.com", "saintjoseph1282004")
+    # Initialize the scraper (logs in via fb_cookies.json)
+    scraper = FacebookScraper()
 
     try:
         # Setup and login
