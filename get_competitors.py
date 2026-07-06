@@ -57,12 +57,17 @@ def _setup_browser():
     )
     options.add_experimental_option("excludeSwitches", ["enable-automation", "enable-logging"])
     options.add_experimental_option("useAutomationExtension", False)
+    options.add_argument("--single-process")
+    options.add_argument("--no-zygote")
+
     prefs = {
         "profile.default_content_setting_values": {"notifications": 2, "geolocation": 2},
         "profile.managed_default_content_settings": {"images": 2},
     }
     options.add_experimental_option("prefs", prefs)
 
+
+    # # for local running
     # try:
     #     driver = webdriver.Chrome(options=options)
     #     driver.set_page_load_timeout(30)
@@ -71,6 +76,8 @@ def _setup_browser():
     # except Exception as e:
     #     logging.error(f"Chrome setup failed: {e}")
     #     raise
+
+    # for streamlit only
     chromium_path = "/usr/bin/chromium"
     driver_path = "/usr/bin/chromedriver"
     if os.path.exists(chromium_path):
@@ -81,7 +88,11 @@ def _setup_browser():
         logging.info(subprocess.run(["chromedriver", "--version"], capture_output=True, text=True).stdout)
 
         if os.path.exists(driver_path):
-            service = Service(executable_path=driver_path)
+            service = Service(
+                            executable_path=driver_path,
+                            log_output="chromedriver.log",
+                            service_args=["--verbose"],
+                            )
             driver = webdriver.Chrome(service=service, options=options)
         else:
             driver = webdriver.Chrome(options=options)
@@ -90,8 +101,12 @@ def _setup_browser():
         return driver
     except Exception as e:
         logging.error(f"Chrome setup failed: {e}")
+        try:
+            with open("chromedriver.log", "r") as f:
+                logging.error("ChromeDriver log:\n" + f.read())
+        except Exception:
+            pass
         raise
-
 def find_competitors(industry: str, region: str, max_competitors: int = 5) -> List[Dict[str, Any]]:
     """
     Search Google Maps for `industry` businesses in `region` and return
