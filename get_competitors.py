@@ -57,9 +57,8 @@ def _setup_browser():
     )
     options.add_experimental_option("excludeSwitches", ["enable-automation", "enable-logging"])
     options.add_experimental_option("useAutomationExtension", False)
-    options.add_argument("--single-process")
-    options.add_argument("--no-zygote")
-
+    options.add_argument("--disable-features=NetworkServiceInProcess")
+    
     prefs = {
         "profile.default_content_setting_values": {"notifications": 2, "geolocation": 2},
         "profile.managed_default_content_settings": {"images": 2},
